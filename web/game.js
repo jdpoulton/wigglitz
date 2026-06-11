@@ -64,12 +64,9 @@
       blocks: [null, [200, 60, 60], [235, 235, 245], [60, 90, 200], [210, 170, 70]],
       ground: [86, 120, 74], dirt: [120, 92, 60], skyTop: [30, 30, 84], skyHor: [150, 152, 196], fog: [150, 152, 196],
       roster: [
-        { name: "Uncle Sam", a: [200, 60, 60], b: [235, 235, 245], eyes: 2 },
-        { name: "Bald Eagle", a: [120, 92, 60], b: [245, 245, 245], eyes: 2 },
-        { name: "Lady Liberty", a: [80, 195, 175], b: [205, 185, 140], eyes: 2 },
-        { name: "Astronaut", a: [235, 235, 245], b: [70, 110, 200], eyes: 2 },
-        { name: "Cyclops", a: [150, 80, 200], b: [60, 200, 180], eyes: 1 },
-        { name: "Dragon", a: [90, 180, 90], b: [210, 70, 70], eyes: 2 }
+        { name: "Abraham", file: "ss1.png" }, { name: "Archie", file: "ss2.png" },
+        { name: "Atlas", file: "ss3.png" }, { name: "Banner", file: "ss4.png" },
+        { name: "Betsy", file: "ss5.png" }
       ]
     },
     {
@@ -77,12 +74,9 @@
       blocks: [null, [40, 140, 210], [60, 200, 200], [205, 230, 245], [120, 90, 200]],
       ground: [56, 150, 168], dirt: [70, 110, 140], skyTop: [10, 40, 92], skyHor: [86, 156, 204], fog: [92, 156, 204],
       roster: [
-        { name: "Clownfish", a: [235, 140, 50], b: [245, 245, 245], eyes: 2 },
-        { name: "Narwhal", a: [120, 150, 220], b: [245, 245, 245], eyes: 2 },
-        { name: "Octopus", a: [170, 90, 200], b: [230, 150, 200], eyes: 2 },
-        { name: "Mermaid", a: [40, 180, 170], b: [150, 80, 200], eyes: 2 },
-        { name: "Pirate", a: [120, 84, 60], b: [210, 70, 70], eyes: 2 },
-        { name: "Puffer", a: [230, 210, 80], b: [120, 180, 90], eyes: 1 }
+        { name: "Anchor", file: "oc1.png" }, { name: "Aqua", file: "oc2.png" },
+        { name: "Arrnold", file: "oc3.png" }, { name: "Blooper", file: "oc4.png" },
+        { name: "Bonkus", file: "oc5.png" }
       ]
     },
     {
@@ -90,12 +84,9 @@
       blocks: [null, [220, 70, 70], [240, 200, 70], [120, 190, 80], [210, 140, 60]],
       ground: [120, 162, 80], dirt: [132, 96, 60], skyTop: [60, 30, 64], skyHor: [232, 184, 152], fog: [232, 190, 160],
       roster: [
-        { name: "Watermelon", a: [90, 180, 90], b: [220, 70, 80], eyes: 2 },
-        { name: "Pizza", a: [225, 182, 120], b: [210, 70, 60], eyes: 2 },
-        { name: "Avocado", a: [110, 162, 70], b: [122, 92, 52], eyes: 2 },
-        { name: "Strawberry", a: [220, 60, 70], b: [110, 182, 80], eyes: 2 },
-        { name: "Banana", a: [240, 222, 92], b: [150, 122, 62], eyes: 2 },
-        { name: "Cookie", a: [172, 122, 72], b: [92, 62, 42], eyes: 1 }
+        { name: "Appy", file: "fz1.png" }, { name: "Berry", file: "fz2.png" },
+        { name: "Broc", file: "fz3.png" }, { name: "Clementine", file: "fz4.png" },
+        { name: "Colada", file: "fz5.png" }
       ]
     },
     {
@@ -103,12 +94,9 @@
       blocks: [null, [170, 80, 210], [80, 210, 130], [240, 120, 60], [60, 200, 220]],
       ground: [72, 92, 112], dirt: [92, 72, 112], skyTop: [40, 10, 64], skyHor: [122, 86, 164], fog: [122, 92, 164],
       roster: [
-        { name: "Flamo", a: [240, 120, 50], b: [220, 60, 50], eyes: 1 },
-        { name: "Fuzzby", a: [170, 90, 200], b: [230, 140, 200], eyes: 2 },
-        { name: "Lookey", a: [60, 200, 200], b: [240, 220, 90], eyes: 1 },
-        { name: "Aqua", a: [60, 140, 210], b: [80, 210, 200], eyes: 2 },
-        { name: "Monsterbot", a: [140, 150, 160], b: [100, 210, 120], eyes: 2 },
-        { name: "Bernadette", a: [230, 130, 190], b: [170, 90, 200], eyes: 2 }
+        { name: "Aqua", file: "km1.png" }, { name: "Bernadette", file: "km2.png" },
+        { name: "Flamo", file: "km3.png" }, { name: "Fuzzby", file: "km4.png" },
+        { name: "Lookey", file: "km5.png" }
       ]
     }
   ];
@@ -132,7 +120,7 @@
     SEED = w.seed; roster = w.roster;
     owned = new Array(roster.length).fill(false);
     totalFound = 0; completeShown = false; unlocked.clear(); edits.clear(); sel = 0;
-    buildSprites(); buildCollectibles();
+    buildCollectibles();
   }
 
   // ---- world generator (1:1 port of the hand-written IL) + varied heights -
@@ -261,7 +249,7 @@
         const isNew = !owned[c.c]; owned[c.c] = true;
         toast(isNew ? "NEW!  " + roster[c.c].name + " joined you!" : "Found another " + roster[c.c].name);
         beep(880, 0.08); setTimeout(() => beep(1320, 0.1), 70);
-        spawnSparkle(roster[c.c].a, roster[c.c].b);
+        spawnSparkle();
         if (totalFound === 1) unlock("first");
         if (countOwned() >= 4) unlock("half");
         checkComplete();
@@ -323,10 +311,10 @@
       particles.push({ x: IW / 2, y: IH / 2, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 40, life: 0.45 + Math.random() * 0.3, max: 0.75, col: col });
     }
   }
-  function spawnSparkle(a, b) {
+  function spawnSparkle() {
     for (let i = 0; i < 22; i++) {
       const ang = Math.random() * Math.PI * 2, spd = 40 + Math.random() * 110;
-      const c = i % 3 === 0 ? rgb(255, 240, 120) : i % 3 === 1 ? rgb(a[0], a[1], a[2]) : rgb(b[0], b[1], b[2]);
+      const c = i % 3 === 0 ? rgb(255, 240, 120) : i % 3 === 1 ? rgb(255, 255, 255) : WALLP[1];
       particles.push({ x: IW / 2, y: IH * 0.62, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 60, life: 0.6 + Math.random() * 0.5, max: 1.1, col: c });
     }
   }
@@ -411,20 +399,35 @@
     }
   }
 
-  // ---- sprites (animated, wiggling Wigglitz billboards) -------------------
-  let sprTex = [];
-  function buildSprites() {
-    sprTex = roster.map(function (w) {
-      const frames = [];
-      for (let f = 0; f < SPR_FRAMES; f++) {
-        const c = document.createElement("canvas"); c.width = TW; c.height = TH;
-        const g = c.getContext("2d");
-        drawWig(g, TW / 2, TH * 0.56, 32, w, f * (Math.PI * 2 / SPR_FRAMES) * 1.5, false);
-        frames.push(new Uint32Array(g.getImageData(0, 0, TW, TH).data.buffer));
-      }
-      return frames;
-    });
+  // ---- character images (real Wigglitz art) ------------------------------
+  const imgCache = {};
+  function buildSpriteFromImg(im) {
+    const c = document.createElement("canvas"); c.width = TW; c.height = TH;
+    const g = c.getContext("2d");
+    let dw = im.width || 1, dh = im.height || 1;
+    const k = Math.min(TW / dw, TH / dh); dw *= k; dh *= k;
+    g.drawImage(im, (TW - dw) / 2, TH - dh, dw, dh);            // contain, feet at bottom
+    return new Uint32Array(g.getImageData(0, 0, TW, TH).data.buffer);
   }
+  function loadImg(file) {
+    if (imgCache[file]) return;
+    const rec = { img: new Image(), ready: false, sprite: null };
+    imgCache[file] = rec;
+    rec.img.onload = function () { try { rec.sprite = buildSpriteFromImg(rec.img); rec.ready = true; } catch (e) { } };
+    rec.img.src = "img/" + file;
+  }
+  function preloadAll() { for (let i = 0; i < WORLDS.length; i++) for (let j = 0; j < WORLDS[i].roster.length; j++) loadImg(WORLDS[i].roster[j].file); }
+
+  // Draw a real character image with a wiggle (lean + sway + bob), centered.
+  function drawCharImg(g, cx, cy, h, file, t) {
+    const rec = imgCache[file];
+    if (!rec || !rec.ready) { ell(g, cx - h * 0.28, cy - h * 0.42, h * 0.56, h * 0.84, "rgba(120,120,150,0.45)"); return; }
+    const im = rec.img, dh = h, dw = (im.width / im.height) * dh;
+    const lean = Math.sin(t * 2.2) * 0.13, sway = Math.sin(t * 3) * h * 0.05, bob = Math.sin(t * 4) * h * 0.05;
+    g.save(); g.translate(cx + sway, cy + bob); g.rotate(lean);
+    g.drawImage(im, -dw / 2, -dh / 2, dw, dh); g.restore();
+  }
+
   function drawSprites() {
     const horizon = IH / 2 + pitch, eyeZ = eyeZsmooth;
     const invDet = 1 / (planeX * dirY - dirX * planeY);
@@ -439,23 +442,26 @@
     for (let i = 0; i < collectibles.length; i++) {
       const c = collectibles[i];
       if (c.got || c.ty < 0.15) continue;
-      let fr = Math.floor(now * 4 + c.x) % SPR_FRAMES; if (fr < 0) fr += SPR_FRAMES;
-      const tex = sprTex[c.c][fr];
+      const rec = imgCache[roster[c.c].file];
+      if (!rec || !rec.ready) continue;
+      const tex = rec.sprite;
       const cellTop = topAt(Math.floor(c.x), Math.floor(c.y));
       const screenX = ((IW / 2) * (1 + c.tx / c.ty)) | 0;
       const fullH = (IH / c.ty) | 0;
-      const sprH = (fullH * 0.8) | 0, sprW = (sprH * TW / TH) | 0;
-      const hover = (Math.sin(now * 2 + i) * fullH * 0.04) | 0;
+      const sprH = (fullH * 0.85) | 0, sprW = (sprH * TW / TH) | 0;
+      const hover = (Math.sin(now * 2 + i) * fullH * 0.03) | 0;
       const feetY = ((horizon - (cellTop - eyeZ) * (IH / c.ty)) | 0) + hover;
       const startY = feetY - sprH, startX = screenX - (sprW >> 1);
       if (startX + sprW < 0 || startX >= IW || sprW <= 0 || sprH <= 0) continue;
       const f = shadeFactor(c.ty);
+      const swayBase = Math.sin(now * 5 + c.x) * sprW * 0.12;     // wiggle: top sways side to side
       for (let x = startX; x < startX + sprW; x++) {
         if (x < 0 || x >= IW) continue;
         if (!(c.ty < zbuf[x])) continue;
-        const texX = ((x - startX) * TW / sprW) | 0; if (texX < 0 || texX >= TW) continue;
         for (let y = startY < 0 ? 0 : startY; y < feetY; y++) {
           if (y >= IH) break;
+          const frac = (feetY - y) / sprH;
+          const texX = (((x - startX) - swayBase * frac) * TW / sprW) | 0; if (texX < 0 || texX >= TW) continue;
           const texY = ((y - startY) * TH / sprH) | 0; if (texY < 0 || texY >= TH) continue;
           const px = tex[texY * TW + texX]; if ((px >>> 24) < 128) continue;
           buf[y * IW + x] = scaleC(px, f);
@@ -464,33 +470,7 @@
     }
   }
 
-  // ---- Wigglitz sprite (vector; wiggles with lean + sway + bob) -----------
   function ell(g, x, y, w, h, style) { g.beginPath(); g.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2); g.fillStyle = style; g.fill(); }
-  function drawWig(g, cx, cy, s, w, t, bobBig) {
-    const bw = s, bh = s * 1.12;
-    ell(g, cx - bw * 0.45, cy + bh * 0.5, bw * 0.9, bh * 0.18, "rgba(0,0,0,0.22)");   // grounded shadow
-    const lean = Math.sin(t * 2.2) * 0.14, bob = Math.sin(t * 4) * s * (bobBig ? 0.05 : 0.09), sway = Math.sin(t * 3) * s * 0.07;
-    g.save(); g.translate(cx + sway, cy + bob); g.rotate(lean);
-    ell(g, -bw * 0.32, bh * 0.34, bw * 0.26, bh * 0.18, cstr(darken(w.a, 0.7)));
-    ell(g, bw * 0.06, bh * 0.34, bw * 0.26, bh * 0.18, cstr(darken(w.a, 0.7)));
-    ell(g, -bw / 2, -bh / 2, bw, bh, cstr(w.a));
-    ell(g, -bw * 0.28, -bh * 0.10, bw * 0.56, bh * 0.5, cstr(w.b));
-    const ey = -bh * 0.18, look = Math.sin(t * 1.5) * s * 0.05;
-    if (w.eyes === 1) {
-      const er = s * 0.26; ell(g, -er, ey - er, er * 2, er * 2, "#fff");
-      const pr = er * 0.5; ell(g, -pr + look, ey - pr, pr * 2, pr * 2, "rgb(30,30,40)");
-    } else {
-      const er = s * 0.15, off = s * 0.18;
-      for (let sgn = -1; sgn <= 1; sgn += 2) {
-        const exx = sgn * off; ell(g, exx - er, ey - er, er * 2, er * 2, "#fff");
-        const pr = er * 0.5; ell(g, exx - pr + look, ey - pr, pr * 2, pr * 2, "rgb(30,30,40)");
-      }
-    }
-    g.strokeStyle = cstr(darken(w.a, 0.6)); g.lineWidth = 1.5;
-    g.beginPath(); g.moveTo(0, -bh * 0.5); g.lineTo(0, -bh * 0.66); g.stroke();
-    ell(g, -s * 0.05, -bh * 0.72, s * 0.1, s * 0.1, cstr(w.b));
-    g.restore();
-  }
 
   // ---- HUD / menus --------------------------------------------------------
   function centerText(g, s, font, color, cx, cy) { g.font = font; g.textBaseline = "middle"; g.textAlign = "center"; g.fillStyle = color; g.fillText(s, cx, cy); g.textAlign = "left"; }
@@ -570,12 +550,12 @@
   function drawTitle(g) {
     centerText(g, "WIGGLITZ", "bold 34px Segoe UI", "rgb(255,230,90)", IW / 2, 56);
     centerText(g, "3D  SANDBOX", "bold 10px Segoe UI", "rgb(120,220,210)", IW / 2, 88);
-    drawWig(g, IW / 2, 140, 44, WORLDS[0].roster[4], now, false);
+    drawCharImg(g, IW / 2, 132, 96, WORLDS[0].roster[0].file, now);
     const all = WORLDS[0].roster, n = all.length, sp = IW / (n + 1);
-    for (let i = 0; i < n; i++) drawWig(g, sp * (i + 1), 208, 15, all[i], now * 1.4 + i * 0.6, false);
+    for (let i = 0; i < n; i++) drawCharImg(g, sp * (i + 1), 205, 36, all[i].file, now * 1.4 + i * 0.6);
     if (((now * 2) | 0) % 2 === 0) centerText(g, "Click or press ENTER to start", "9px Segoe UI", "#fff", IW / 2, 176);
     centerText(g, "pick a world  -  pick a Wigglitz  -  build, dig & collect", "8px Segoe UI", "rgb(180,200,210)", IW / 2, 236);
-    g.font = "7px Segoe UI"; g.fillStyle = "rgba(255,255,255,0.4)"; g.textAlign = "right"; g.fillText("v5", IW - 6, IH - 6); g.textAlign = "left";
+    g.font = "7px Segoe UI"; g.fillStyle = "rgba(255,255,255,0.4)"; g.textAlign = "right"; g.fillText("v6", IW - 6, IH - 6); g.textAlign = "left";
   }
   function startBtn() { return { x: IW / 2 - 52, y: 244, w: 104, h: 20 }; }
   function drawWorldSelect(g) {
@@ -586,7 +566,7 @@
       // theme swatch card
       g.fillStyle = cstr(w.skyHor, 0.5); g.fillRect(cx - 44, rowY - 56, 88, 96);
       for (let b = 1; b <= 4; b++) { g.fillStyle = "rgb(" + w.blocks[b][0] + "," + w.blocks[b][1] + "," + w.blocks[b][2] + ")"; g.fillRect(cx - 40 + (b - 1) * 20, rowY + 24, 18, 12); }
-      drawWig(g, cx, rowY - 6, 30, w.roster[0], now + i, false);
+      drawCharImg(g, cx, rowY - 6, 68, w.roster[0].file, now + i);
       centerText(g, w.name, i === worldSel ? "bold 9px Segoe UI" : "8px Segoe UI", i === worldSel ? "#fff" : "rgb(165,175,190)", cx, rowY + 52);
       if (i === worldSel) { g.strokeStyle = "rgb(255,230,90)"; g.lineWidth = 2.5; g.strokeRect(cx - 44, rowY - 56, 88, 96); }
     }
@@ -597,8 +577,8 @@
     const n = roster.length, spacing = IW / (n + 1), rowY = 108;
     for (let i = 0; i < n; i++) {
       const cx = spacing * (i + 1), scale = i === sel ? 38 : 26;
-      if (i === sel) { g.strokeStyle = "rgb(255,230,90)"; g.lineWidth = 2; g.strokeRect(cx - 26, rowY - 42, 52, 86); }
-      drawWig(g, cx, rowY, scale, roster[i], now + i, false);
+      if (i === sel) { g.strokeStyle = "rgb(255,230,90)"; g.lineWidth = 2; g.strokeRect(cx - 30, rowY - 44, 60, 92); }
+      drawCharImg(g, cx, rowY, scale * 2.3, roster[i].file, now + i);
       centerText(g, roster[i].name, i === sel ? "bold 8px Segoe UI" : "7px Segoe UI", i === sel ? "#fff" : "rgb(150,160,175)", cx, rowY + 36);
     }
     centerText(g, "You picked:  " + roster[sel].name, "bold 12px Segoe UI", "#fff", IW / 2, 182);
@@ -618,7 +598,7 @@
     const cols = 3, cw = 110, chh = 64, ox = IW / 2 - (cols * cw) / 2, oy = 78;
     for (let i = 0; i < roster.length; i++) {
       const cxi = i % cols, cyi = (i / cols) | 0, cx = ox + cxi * cw + cw / 2, cy = oy + cyi * chh + 24;
-      if (owned[i]) { drawWig(g, cx, cy, 26, roster[i], now + i, false); centerText(g, roster[i].name, "8px Segoe UI", "#fff", cx, cy + 30); }
+      if (owned[i]) { drawCharImg(g, cx, cy, 56, roster[i].file, now + i); centerText(g, roster[i].name, "8px Segoe UI", "#fff", cx, cy + 30); }
       else { ell(g, cx - 13, cy - 16, 26, 32, "rgb(60,60,70)"); centerText(g, "? ? ?", "8px Segoe UI", "rgb(120,120,130)", cx, cy + 30); }
     }
     centerText(g, completeShown ? "COMPLETE!   Press C to return" : "Explore to find them all.   Press C to return", "8px Segoe UI", "rgb(205,220,230)", IW / 2, IH - 10);
@@ -734,6 +714,7 @@
 
   // ---- boot ---------------------------------------------------------------
   resize();
+  preloadAll();
   applyWorld(0);
   try { canvas.focus(); } catch (e) { }
   window.addEventListener("load", function () { try { canvas.focus(); } catch (e) { } });
