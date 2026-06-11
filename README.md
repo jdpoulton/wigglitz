@@ -73,6 +73,28 @@ Run **`Play.bat`** (or the built `Wigglitz3D.exe`).
 All world edits and your collection live entirely in memory — nothing is saved
 to disk, so each launch is a fresh world.
 
+## Web version (play in a browser / deploy to Vercel)
+
+[`web/`](web/) is a self-contained HTML5 Canvas port — same heightmap world,
+build/dig towers and holes, collectibles, and Wigglitz. The world generator is a
+1:1 JavaScript port of the hand-written IL, **verified to produce an identical
+map**. Mouse-look uses the browser Pointer Lock API (smooth, no recentering).
+
+Pure static files — no build step, no dependencies.
+
+**Try it locally:** open `web/index.html` in a browser (just double-click it).
+
+**Deploy to Vercel:**
+1. On [vercel.com](https://vercel.com): New Project -> import this repo ->
+   set **Root Directory** to `web` -> Framework Preset **Other** -> **Deploy**
+   (no build command; it's static).
+2. Or with the CLI: `cd web && npx vercel`.
+
+**Controls:** click the canvas to capture the mouse, then **mouse** to look,
+**WASD** to move, **left-click** dig, **right-click** build, **1-4** pick a
+block, **C** collection, **Esc** to release. **-** / **+** tune sensitivity.
+(Desktop-oriented; touch controls aren't wired up yet.)
+
 ## The roster
 
 Drawn in code from the wigglitz.com palette (teals, purples, yellows, greens):
