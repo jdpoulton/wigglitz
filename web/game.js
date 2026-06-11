@@ -1,19 +1,15 @@
 /* ============================================================================
-   Wigglitz 3D - web edition (HTML5 Canvas).
+   Wigglitz 3D - web edition (HTML5 Canvas). Phase 4.
 
-   A faithful JavaScript port of the desktop Phase 3 build: a heightmap voxel
-   raycaster where you build towers, dig holes, and collect Wigglitz. The world
-   generator is a 1:1 port of the hand-written IL (WorldGen.il) -- verified to
-   produce an identical world. Mouse-look uses the Pointer Lock API for smooth,
-   recenter-free aiming.
-
-   Pure static file: no build step, no dependencies. Host the /web folder
-   anywhere (e.g. Vercel) and it runs.
+   A heightmap voxel raycaster: explore an open world, build towers, dig holes,
+   and collect the Wigglitz. The world generator is a 1:1 port of the original
+   hand-written .NET IL, verified to produce an identical map. Mouse-look uses
+   the Pointer Lock API. Pure static file - no build step, no dependencies.
    ========================================================================== */
 (function () {
   "use strict";
 
-  // ---- constants (match the desktop build) --------------------------------
+  // ---- constants ----------------------------------------------------------
   const IW = 480, IH = 270, SX = 2, SY = 2, TW = 48, TH = 60;
   const WALL_H = 3, FAR = 24, MAXSTEPS = 64, MAXTOP = 12, MINTOP = -8, EYE = 0.6, SEED = 1337;
 
@@ -73,6 +69,8 @@
   const WB = [0, 170, 200, 60, 90];
   const WALLP = WR.map((_, i) => rgb(WR[i], WG[i], WB[i]));
   const GRASS = rgb(70, 130, 70), DIRT = rgb(120, 85, 55);
+  const FOG = rgb(120, 138, 170);           // atmospheric far color (matches horizon)
+  const SKY_TOP = rgb(28, 22, 60), SKY_HOR = rgb(120, 138, 170);
 
   // ---- roster -------------------------------------------------------------
   const roster = [
@@ -140,20 +138,38 @@
       }
   }
 
+  // ---- achievements -------------------------------------------------------
+  const ACH = [
+    { id: "first", name: "First Friend" },
+    { id: "half",  name: "Halfway There" },
+    { id: "tower", name: "Architect" },
+    { id: "dig",   name: "Spelunker" },
+    { id: "all",   name: "Gotta Find 'Em All" }
+  ];
+  const unlocked = new Set();
+  function unlock(id) {
+    if (unlocked.has(id)) return;
+    unlocked.add(id);
+    const a = ACH.find(x => x.id === id);
+    if (a) { toast("Achievement: " + a.name); beep(1400, 0.07); setTimeout(() => beep(1900, 0.09), 90); }
+  }
+
   // ---- player / camera ----------------------------------------------------
   let posX = SX + 0.5, posY = SY + 0.5;
   let dirX = -1, dirY = 0, planeX = 0, planeY = 0.66;
   let pitch = 0, eyeZsmooth = EYE;
+  let footZ = 0, vz = 0, onGround = true;
+  const GRAV = 20, JUMP = 7.5, STEP = 1.1;
   let sel = 0, selBlock = 1;
   const owned = new Array(roster.length).fill(false);
   let totalFound = 0, completeShown = false;
 
   let state = "title";       // title | select | play
-  let showCollection = false;
+  let showCollection = false, showHelp = false;
   let locked = false;
   let sens = 1.0;
   const keys = new Set();
-  let now = 0, lastT = 0;
+  let now = 0, lastT = 0, stepPhase = 0;
   let toastText = "", toastUntil = 0;
   const particles = [];
 
@@ -162,13 +178,11 @@
     const ox = dirX; dirX = dirX * ca - dirY * sa; dirY = ox * sa + dirY * ca;
     const opx = planeX; planeX = planeX * ca - planeY * sa; planeY = opx * sa + planeY * ca;
   }
-
   function startWorld() {
-    state = "play"; showCollection = false;
+    state = "play"; showCollection = false; showHelp = false;
     posX = SX + 0.5; posY = SY + 0.5; dirX = -1; dirY = 0; planeX = 0; planeY = 0.66;
-    pitch = 0; eyeZsmooth = topAt(SX, SY) + EYE;
+    pitch = 0; footZ = topAt(SX, SY); vz = 0; onGround = true; eyeZsmooth = footZ + EYE;
   }
-
   function toast(t) {
     if (completeShown && now < toastUntil) return;
     toastText = t; toastUntil = now + 2.2;
@@ -176,27 +190,34 @@
 
   // ---- update -------------------------------------------------------------
   function tryMove(nx, ny) {
-    const cx = Math.floor(posX), cy = Math.floor(posY);
-    const curTop = topAt(cx, cy);
-    if (topAt(Math.floor(nx), cy) <= curTop + 1) posX = nx;
+    const cy = Math.floor(posY);
+    if (topAt(Math.floor(nx), cy) <= footZ + STEP) posX = nx;   // walk up small steps; jump clears taller
     const cx2 = Math.floor(posX);
-    if (topAt(cx2, Math.floor(ny)) <= curTop + 1) posY = ny;
+    if (topAt(cx2, Math.floor(ny)) <= footZ + STEP) posY = ny;
   }
-
   function update(dt) {
-    const ms = 3.2 * dt;
+    const ms = 3.4 * dt;
     const fwd = keys.has("KeyW") || keys.has("ArrowUp");
     const back = keys.has("KeyS") || keys.has("ArrowDown");
     const sl = keys.has("KeyA") || keys.has("ArrowLeft");
     const sr = keys.has("KeyD") || keys.has("ArrowRight");
+    const px0 = posX, py0 = posY;
     if (fwd) tryMove(posX + dirX * ms, posY + dirY * ms);
     if (back) tryMove(posX - dirX * ms, posY - dirY * ms);
     if (sr) tryMove(posX + dirY * ms, posY - dirX * ms);
     if (sl) tryMove(posX - dirY * ms, posY + dirX * ms);
 
-    const target = topAt(Math.floor(posX), Math.floor(posY)) + EYE;
-    let k = dt * 12; if (k > 1) k = 1;
-    eyeZsmooth += (target - eyeZsmooth) * k;
+    // footstep ticks while actually moving
+    const moved = Math.abs(posX - px0) + Math.abs(posY - py0);
+    if (moved > 0.0005) { stepPhase += moved; if (stepPhase > 1.6) { stepPhase = 0; beep(140, 0.035); } }
+
+    // vertical physics: jump + gravity, so you can hop, fall off ledges, and sink into holes
+    if (keys.has("Space") && onGround) { vz = JUMP; onGround = false; beep(300, 0.04); }
+    vz -= GRAV * dt; footZ += vz * dt;
+    const gl = topAt(Math.floor(posX), Math.floor(posY));
+    if (footZ <= gl) { footZ = gl; vz = 0; onGround = true; } else { onGround = false; }
+    let k = dt * 18; if (k > 1) k = 1;
+    eyeZsmooth += (footZ + EYE - eyeZsmooth) * k;
 
     for (let i = 0; i < collectibles.length; i++) {
       const c = collectibles[i];
@@ -208,15 +229,16 @@
         toast(isNew ? "NEW!  Collected " + roster[c.c].name + "!" : "Collected another " + roster[c.c].name);
         beep(880, 0.08); setTimeout(() => beep(1320, 0.10), 70);
         spawnSparkle(roster[c.c].a, roster[c.c].b);
+        if (totalFound === 1) unlock("first");
+        if (countOwned() >= 4) unlock("half");
         checkComplete();
       }
     }
   }
-
   function checkComplete() {
     for (let i = 0; i < owned.length; i++) if (!owned[i]) return;
     if (!completeShown) {
-      completeShown = true;
+      completeShown = true; unlocked.add("all");
       toastText = "COLLECTION COMPLETE!  You found every Wigglitz!";
       toastUntil = now + 5.0;
       beep(660, 0.1); setTimeout(() => beep(990, 0.12), 110); setTimeout(() => beep(1320, 0.16), 240);
@@ -225,6 +247,7 @@
 
   // ---- build / dig --------------------------------------------------------
   function findTarget() {
+    if (pitch < -50) return { tx: Math.floor(posX), ty: Math.floor(posY), on: true };  // look down -> dig down / pillar up
     const rdx = dirX, rdy = dirY;
     const pcx = Math.floor(posX), pcy = Math.floor(posY);
     const surface = topAt(pcx, pcy);
@@ -251,10 +274,10 @@
     setCell(t.tx, t.ty, nt, mat);
     spawnBurst(colorAt(t.tx, t.ty), 14);
     beep(200, 0.05);
+    if (nt <= -3) unlock("dig");
   }
   function doPlace() {
-    const t = findTarget();
-    if (t.tx === Math.floor(posX) && t.ty === Math.floor(posY)) return;
+    const t = findTarget();   // looking down places under you (pillar up); gravity rides you up
     let top;
     const e = edits.get(nkey(t.tx, t.ty));
     top = e ? e.top : baseTop(t.tx, t.ty);
@@ -262,6 +285,7 @@
     setCell(t.tx, t.ty, nt, selBlock);
     spawnBurst(WALLP[selBlock], 8);
     beep(420, 0.05);
+    if (nt >= 5) unlock("tower");
   }
 
   // ---- particles ----------------------------------------------------------
@@ -286,29 +310,36 @@
     }
   }
 
-  // ---- audio (WebAudio beeps, no asset files) -----------------------------
+  // ---- audio --------------------------------------------------------------
   let actx = null;
-  function beep(freq, dur) {
+  function ensureAudio() {
     try {
       if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === "suspended") actx.resume();
+    } catch (e) { /* ignore */ }
+  }
+  function beep(freq, dur) {
+    try {
+      if (!actx) return;
       const o = actx.createOscillator(), g = actx.createGain();
-      o.type = "square"; o.frequency.value = freq;
-      g.gain.value = 0.05;
-      o.connect(g); g.connect(actx.destination);
-      o.start();
+      o.type = "square"; o.frequency.value = freq; g.gain.value = 0.045;
+      o.connect(g); g.connect(actx.destination); o.start();
       g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
       o.stop(actx.currentTime + dur + 0.02);
     } catch (e) { /* ignore */ }
   }
 
   // ---- renderer (heightmap voxel) -----------------------------------------
-  function shadeDist(col, d, side) {
-    let f = 1.9 / (d + 0.9); if (f > 1) f = 1; else if (f < 0.28) f = 0.28;
-    if (side === 1) f *= 0.86;
-    return scaleC(col, f);
+  function shadeDist(col, d, side, checker) {
+    let f = 1.9 / (d + 0.9); if (f > 1) f = 1; else if (f < 0.32) f = 0.32;
+    if (side === 1) f *= 0.82;
+    f *= checker;
+    let out = scaleC(col, f);
+    let fogT = (d - 3) / (FAR - 3); if (fogT < 0) fogT = 0; else if (fogT > 0.72) fogT = 0.72;
+    return lerpC(out, FOG, fogT);
   }
   function shadeFactor(d) { let f = 1.9 / (d + 0.9); return f > 1 ? 1 : f < 0.4 ? 0.4 : f; }
-  function skyAt(y, horizon) { return lerpC(rgb(25, 18, 50), rgb(95, 110, 150), horizon <= 1 ? 0 : y / horizon); }
+  function skyAt(y, horizon) { return lerpC(SKY_TOP, SKY_HOR, horizon <= 1 ? 0 : y / horizon); }
 
   function renderWorld() {
     const horizon = IH / 2 + pitch, eyeZ = eyeZsmooth;
@@ -333,10 +364,11 @@
         let iyT = (horizon - (top - eyeZ) * (IH / d)) | 0;
         if (iyT < currentTopY) {
           if (iyT < 0) iyT = 0;
-          const col = shadeDist(colorAt(mapX, mapY), d, side);
+          const checker = ((mapX + mapY) & 1) === 0 ? 1.0 : 0.84;   // grid texture
+          const col = shadeDist(colorAt(mapX, mapY), d, side, checker);
           let bot = currentTopY | 0; if (bot > IH) bot = IH;
-          const base = x;
-          for (let y = iyT; y < bot; y++) buf[y * IW + base] = col;
+          for (let y = iyT; y < bot; y++) buf[y * IW + x] = col;
+          buf[iyT * IW + x] = scaleC(col, 1.25);     // bright top edge -> blocky definition + floor grid lines
           currentTopY = iyT;
           if (currentTopY <= 0) break;
         }
@@ -476,9 +508,13 @@
       const c = collectibles[i]; if (c.got) continue;
       const rx = Math.floor(c.x) - pcx, ry = Math.floor(c.y) - pcy;
       if (rx < -R || rx > R || ry < -R || ry > R) continue;
-      g.fillStyle = "rgb(255,245,120)"; ell(g, ox + (rx + R) * cs, oy + (ry + R) * cs, cs - 1, cs - 1, "rgb(255,245,120)");
+      ell(g, ox + (rx + R) * cs, oy + (ry + R) * cs, cs - 1, cs - 1, "rgb(255,245,120)");
     }
-    ell(g, ox + R * cs, oy + R * cs, cs - 1, cs - 1, "#fff");
+    // player + facing arrow
+    const pcxv = ox + R * cs + cs / 2, pcyv = oy + R * cs + cs / 2;
+    g.strokeStyle = "rgba(255,255,255,0.95)"; g.lineWidth = 1.5;
+    g.beginPath(); g.moveTo(pcxv, pcyv); g.lineTo(pcxv + dirX * cs * 1.8, pcyv + dirY * cs * 1.8); g.stroke();
+    ell(g, pcxv - 1.5, pcyv - 1.5, 3, 3, "#fff");
   }
 
   function drawToast(g) {
@@ -486,36 +522,39 @@
     let a = Math.min(1, (toastUntil - now) / 0.5);
     g.font = "bold 12px Segoe UI"; g.textAlign = "center";
     const w = g.measureText(toastText).width;
-    g.fillStyle = "rgba(0,0,0," + (0.6 * a) + ")"; g.fillRect(IW / 2 - w / 2 - 8, 66, w + 16, 20);
-    g.fillStyle = "rgba(255,235,120," + a + ")"; g.textBaseline = "middle"; g.fillText(toastText, IW / 2, 78);
+    g.fillStyle = "rgba(0,0,0," + (0.6 * a) + ")"; g.fillRect(IW / 2 - w / 2 - 8, 64, w + 16, 20);
+    g.fillStyle = "rgba(255,235,120," + a + ")"; g.textBaseline = "middle"; g.fillText(toastText, IW / 2, 76);
     g.textAlign = "left";
   }
 
   function drawHud(g) {
     const t = findTarget();
-    g.strokeStyle = t.on ? "rgba(255,230,90,1)" : "rgba(255,255,255,0.66)";
-    g.lineWidth = t.on ? 1.6 : 1;
+    g.strokeStyle = t.on ? "rgba(255,230,90,1)" : "rgba(255,255,255,0.7)";
+    g.lineWidth = t.on ? 1.8 : 1;
     g.beginPath(); g.moveTo(IW / 2 - 5, IH / 2); g.lineTo(IW / 2 + 5, IH / 2);
     g.moveTo(IW / 2, IH / 2 - 5); g.lineTo(IW / 2, IH / 2 + 5); g.stroke();
 
     drawHotbar(g); drawMiniMap(g);
 
-    const s = "Wigglitz: " + countOwned() + " / " + roster.length + "   (picked up " + totalFound + ")";
-    g.font = "bold 9px Segoe UI"; g.textAlign = "center";
+    const s = "Wigglitz  " + countOwned() + " / " + roster.length;
+    g.font = "bold 10px Segoe UI"; g.textAlign = "center";
     const w = g.measureText(s).width;
-    g.fillStyle = "rgba(0,0,0,0.6)"; g.fillRect(IW / 2 - w / 2 - 5, 4, w + 10, 13);
-    g.fillStyle = "#fff"; g.textBaseline = "middle"; g.fillText(s, IW / 2, 11); g.textAlign = "left";
+    g.fillStyle = "rgba(0,0,0,0.55)"; g.fillRect(IW / 2 - w / 2 - 6, 4, w + 12, 15);
+    g.fillStyle = "#ffe85a"; g.textBaseline = "middle"; g.fillText(s, IW / 2, 12); g.textAlign = "left";
 
-    g.font = "7px Segoe UI"; g.fillStyle = "#fff"; g.textBaseline = "alphabetic";
-    g.fillText("Mouse look ( - / + )  WASD move  LMB dig  RMB build  1-4 block  C collection  Esc release", 6, IH - 6);
+    g.font = "7px Segoe UI"; g.textBaseline = "alphabetic"; g.fillStyle = "rgba(255,255,255,0.88)";
+    g.fillText("LMB dig   RMB build   Space jump   1-4 block   H help", 6, IH - 6);
+    g.textAlign = "right"; g.fillStyle = "rgba(255,255,255,0.7)";
+    g.fillText("Achievements " + unlocked.size + "/" + ACH.length, IW - 6, IH - 6); g.textAlign = "left";
 
     if (!locked) {
-      g.fillStyle = "rgba(0,0,0,0.45)"; g.fillRect(0, IH / 2 - 18, IW, 26);
-      centerText(g, "Click to look around, dig & build", "bold 11px Segoe UI", "#fff", IW / 2, IH / 2 - 5);
+      g.fillStyle = "rgba(0,0,0,0.5)"; g.fillRect(0, IH / 2 - 18, IW, 26);
+      centerText(g, "Click to look, build & dig", "bold 11px Segoe UI", "#fff", IW / 2, IH / 2 - 5);
     }
     drawToast(g);
   }
 
+  // ---- menus --------------------------------------------------------------
   function drawMenuBg(g) {
     const grad = g.createLinearGradient(0, 0, 0, IH);
     grad.addColorStop(0, "rgb(35,25,70)"); grad.addColorStop(1, "rgb(20,60,75)");
@@ -528,42 +567,70 @@
     }
   }
   function drawTitle(g) {
-    drawWig(g, IW / 2, 150, 46, roster[0], now, false);
-    centerText(g, "WIGGLITZ", "bold 34px Segoe UI", "rgb(255,230,90)", IW / 2, 72);
-    centerText(g, "3D  SANDBOX", "bold 10px Segoe UI", "rgb(120,220,210)", IW / 2, 108);
-    if (((now * 2) | 0) % 2 === 0) centerText(g, "Click or press ENTER to choose your Wigglitz", "9px Segoe UI", "#fff", IW / 2, 200);
-    centerText(g, "look - move - dig - build towers - collect them all", "9px Segoe UI", "rgb(180,200,210)", IW / 2, 226);
+    centerText(g, "WIGGLITZ", "bold 34px Segoe UI", "rgb(255,230,90)", IW / 2, 56);
+    centerText(g, "3D  SANDBOX", "bold 10px Segoe UI", "rgb(120,220,210)", IW / 2, 88);
+    drawWig(g, IW / 2, 138, 44, roster[0], now, false);
+    const n = roster.length, sp = IW / (n + 1);
+    for (let i = 0; i < n; i++) drawWig(g, sp * (i + 1), 208, 15, roster[i], now * 1.2 + i * 0.6, false);
+    if (((now * 2) | 0) % 2 === 0) centerText(g, "Click or press ENTER to start", "9px Segoe UI", "#fff", IW / 2, 176);
+    centerText(g, "explore  -  build towers  -  dig holes  -  collect them all", "8px Segoe UI", "rgb(180,200,210)", IW / 2, 236);
     g.font = "7px Segoe UI"; g.fillStyle = "rgba(255,255,255,0.4)"; g.textAlign = "right";
-    g.fillText("web build 3", IW - 6, IH - 6); g.textAlign = "left";
+    g.fillText("v4", IW - 6, IH - 6); g.textAlign = "left";
   }
+  function startBtn() { return { x: IW / 2 - 52, y: 244, w: 104, h: 20 }; }
   function drawSelect(g) {
-    centerText(g, "CHOOSE YOUR WIGGLITZ", "bold 16px Segoe UI", "rgb(255,230,90)", IW / 2, 26);
-    const n = roster.length, spacing = IW / (n + 1), rowY = 130;
+    centerText(g, "CHOOSE YOUR WIGGLITZ", "bold 16px Segoe UI", "rgb(255,230,90)", IW / 2, 22);
+    const n = roster.length, spacing = IW / (n + 1), rowY = 108;
     for (let i = 0; i < n; i++) {
-      const cx = spacing * (i + 1), scale = i === sel ? 40 : 28;
+      const cx = spacing * (i + 1), scale = i === sel ? 38 : 26;
+      if (i === sel) { g.strokeStyle = "rgb(255,230,90)"; g.lineWidth = 2; g.strokeRect(cx - 26, rowY - 42, 52, 86); }
       drawWig(g, cx, rowY, scale, roster[i], now + i, false);
-      if (i === sel) { g.strokeStyle = "rgb(255,230,90)"; g.lineWidth = 2; g.strokeRect(cx - 30, rowY - 46, 60, 80); }
+      centerText(g, roster[i].name, i === sel ? "bold 8px Segoe UI" : "7px Segoe UI", i === sel ? "#fff" : "rgb(150,160,175)", cx, rowY + 36);
     }
-    centerText(g, roster[sel].name, "bold 11px Segoe UI", "#fff", IW / 2, 190);
-    centerText(g, "LEFT / RIGHT to choose      ENTER to enter the world", "8px Segoe UI", "rgb(205,220,230)", IW / 2, 232);
+    centerText(g, "You picked:  " + roster[sel].name, "bold 12px Segoe UI", "#fff", IW / 2, 182);
+    const b = startBtn();
+    g.fillStyle = "rgb(90,200,120)"; g.fillRect(b.x, b.y, b.w, b.h);
+    g.strokeStyle = "rgba(255,255,255,0.85)"; g.lineWidth = 1.5; g.strokeRect(b.x, b.y, b.w, b.h);
+    centerText(g, "START", "bold 11px Segoe UI", "rgb(6,33,15)", IW / 2, b.y + b.h / 2 + 1);
+    centerText(g, "click a Wigglitz to choose, then START   (or press ENTER)", "7px Segoe UI", "rgb(205,220,230)", IW / 2, b.y + b.h + 9);
   }
   function drawCollection(g) {
-    g.fillStyle = "rgba(12,10,26,0.82)"; g.fillRect(0, 0, IW, IH);
-    centerText(g, "YOUR WIGGLITZ COLLECTION", "bold 18px Segoe UI", "rgb(255,230,90)", IW / 2, 26);
-    centerText(g, "Found " + countOwned() + " of " + roster.length, "bold 9px Segoe UI", "#fff", IW / 2, 50);
-    const cols = 4, cw = 100, chh = 78, ox = IW / 2 - (cols * cw) / 2, oy = 66;
+    g.fillStyle = "rgba(12,10,26,0.85)"; g.fillRect(0, 0, IW, IH);
+    centerText(g, "YOUR WIGGLITZ COLLECTION", "bold 18px Segoe UI", "rgb(255,230,90)", IW / 2, 24);
+    centerText(g, "Found " + countOwned() + " of " + roster.length, "bold 9px Segoe UI", "#fff", IW / 2, 46);
+    const pw = 200, px = IW / 2 - pw / 2, py = 54;
+    g.fillStyle = "rgba(255,255,255,0.15)"; g.fillRect(px, py, pw, 6);
+    g.fillStyle = "rgb(255,230,90)"; g.fillRect(px, py, pw * countOwned() / roster.length, 6);
+    const cols = 4, cw = 100, chh = 76, ox = IW / 2 - (cols * cw) / 2, oy = 72;
     for (let i = 0; i < roster.length; i++) {
       const cxi = i % cols, cyi = (i / cols) | 0;
-      const cx = ox + cxi * cw + cw / 2, cy = oy + cyi * chh + 30;
-      if (owned[i]) { drawWig(g, cx, cy, 30, roster[i], now + i, false); centerText(g, roster[i].name, "8px Segoe UI", "#fff", cx, cy + 34); }
-      else { ell(g, cx - 15, cy - 18, 30, 36, "rgb(60,60,70)"); centerText(g, "? ? ?", "8px Segoe UI", "rgb(120,120,130)", cx, cy + 34); }
+      const cx = ox + cxi * cw + cw / 2, cy = oy + cyi * chh + 28;
+      if (owned[i]) { drawWig(g, cx, cy, 28, roster[i], now + i, false); centerText(g, roster[i].name, "8px Segoe UI", "#fff", cx, cy + 32); }
+      else { ell(g, cx - 14, cy - 17, 28, 34, "rgb(60,60,70)"); centerText(g, "? ? ?", "8px Segoe UI", "rgb(120,120,130)", cx, cy + 32); }
     }
-    centerText(g, completeShown ? "COMPLETE!  Press C to return" : "Explore to find them all.   Press C to return", "8px Segoe UI", "rgb(205,220,230)", IW / 2, IH - 14);
+    centerText(g, completeShown ? "COMPLETE!   Press C to return" : "Explore to find them all.   Press C to return", "8px Segoe UI", "rgb(205,220,230)", IW / 2, IH - 12);
+  }
+  function drawHelp(g) {
+    g.fillStyle = "rgba(12,10,26,0.9)"; g.fillRect(0, 0, IW, IH);
+    centerText(g, "HOW TO PLAY", "bold 18px Segoe UI", "rgb(255,230,90)", IW / 2, 28);
+    const lines = [
+      "Mouse  -  look around  (click the screen to capture it)",
+      "W A S D  -  move          Space  -  jump",
+      "Left click  -  DIG    (look down to dig straight down)",
+      "Right click  -  BUILD    (look down to pillar straight up)",
+      "1 - 4  -  block color      - / +  -  mouse sensitivity",
+      "C  -  collection     H  -  help     Esc  -  back to menu"
+    ];
+    g.font = "9px Segoe UI"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#e8e8f0";
+    for (let i = 0; i < lines.length; i++) g.fillText(lines[i], IW / 2, 62 + i * 22);
+    g.textAlign = "left";
+    centerText(g, "Goal: find all " + roster.length + " Wigglitz hidden across the world!", "bold 9px Segoe UI", "rgb(150,220,180)", IW / 2, IH - 36);
+    centerText(g, "Press H or Esc to return", "8px Segoe UI", "rgb(205,220,230)", IW / 2, IH - 14);
   }
 
   // ---- frame --------------------------------------------------------------
   function render() {
-    if (fatal) return;   // error screen already drawn by showFatal()
+    if (fatal) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(S, 0, 0, S, 0, 0);
@@ -574,17 +641,17 @@
       ctx.drawImage(low, 0, 0);
       drawParticles(ctx); drawHud(ctx);
       if (showCollection) drawCollection(ctx);
+      if (showHelp) drawHelp(ctx);
     } else {
       drawMenuBg(ctx);
       if (state === "title") drawTitle(ctx); else drawSelect(ctx);
     }
   }
-
   function loop(ts) {
     try {
       now = ts / 1000;
       let dt = now - lastT; lastT = now; if (dt > 0.05) dt = 0.05;
-      if (state === "play" && !showCollection) update(dt);
+      if (state === "play" && !showCollection && !showHelp) update(dt);
       if (state === "play") updateParticles(dt);
       render();
     } catch (err) {
@@ -595,45 +662,50 @@
 
   // ---- input --------------------------------------------------------------
   window.addEventListener("keydown", function (e) {
-    keys.add(e.code);
+    keys.add(e.code); ensureAudio();
     if (state === "title") { if (e.code === "Enter") state = "select"; }
     else if (state === "select") {
       if (e.code === "ArrowLeft") sel = (sel - 1 + roster.length) % roster.length;
       else if (e.code === "ArrowRight") sel = (sel + 1) % roster.length;
       else if (e.code === "Enter") startWorld();
     } else {
-      if (e.code === "KeyC" || e.code === "Tab") { showCollection = !showCollection; if (showCollection && document.pointerLockElement) document.exitPointerLock(); }
+      if (e.code === "KeyC" || e.code === "Tab") { showCollection = !showCollection; showHelp = false; if (showCollection && document.pointerLockElement) document.exitPointerLock(); }
+      else if (e.code === "KeyH") { showHelp = !showHelp; showCollection = false; if (showHelp && document.pointerLockElement) document.exitPointerLock(); }
       else if (e.code === "Digit1") selBlock = 1;
       else if (e.code === "Digit2") selBlock = 2;
       else if (e.code === "Digit3") selBlock = 3;
       else if (e.code === "Digit4") selBlock = 4;
-      else if (e.code === "Minus") { sens = Math.max(0.2, sens / 1.25); toast("Sensitivity " + Math.round(sens * 100) + "%"); }
-      else if (e.code === "Equal") { sens = Math.min(4, sens * 1.25); toast("Sensitivity " + Math.round(sens * 100) + "%"); }
-      else if (e.code === "Escape") { if (showCollection) showCollection = false; else state = "select"; }
+      else if (e.code === "Minus") { sens = Math.max(0.2, sens / 1.25); toast("Mouse sensitivity " + Math.round(sens * 100) + "%"); }
+      else if (e.code === "Equal") { sens = Math.min(4, sens * 1.25); toast("Mouse sensitivity " + Math.round(sens * 100) + "%"); }
+      else if (e.code === "Escape") { if (showCollection) showCollection = false; else if (showHelp) showHelp = false; else state = "select"; }
     }
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Tab"].indexOf(e.code) >= 0) e.preventDefault();
   });
   window.addEventListener("keyup", function (e) { keys.delete(e.code); });
 
   canvas.addEventListener("click", function (e) {
-    canvas.focus();                          // grab keyboard focus (fixes "keys do nothing")
+    canvas.focus(); ensureAudio();
     if (state === "title") { state = "select"; return; }
-    if (state === "select") {                // click a Wigglitz to pick + start
+    if (state === "select") {
+      const ix = e.offsetX / S, iy = e.offsetY / S, b = startBtn();
+      if (ix >= b.x && ix <= b.x + b.w && iy >= b.y && iy <= b.y + b.h) { startWorld(); return; }
       const n = roster.length, spacing = IW / (n + 1);
-      let i = Math.round((e.offsetX / S) / spacing) - 1;
+      let i = Math.round(ix / spacing) - 1;
       if (i < 0) i = 0; else if (i >= n) i = n - 1;
-      sel = i; startWorld(); return;
+      sel = i; return;                       // choose only; START begins the game
     }
-    if (!showCollection && document.pointerLockElement !== canvas) canvas.requestPointerLock();
+    if (showCollection || showHelp) return;
+    if (document.pointerLockElement !== canvas) canvas.requestPointerLock();
   });
   document.addEventListener("pointerlockchange", function () { locked = document.pointerLockElement === canvas; });
   document.addEventListener("mousemove", function (e) {
     if (!locked) return;
-    if (e.movementX) rotate(e.movementX * 0.0022 * sens);
-    if (e.movementY) { pitch -= e.movementY * 0.9 * sens; if (pitch < -200) pitch = -200; else if (pitch > 200) pitch = 200; }
+    const mx = e.movementX || 0, my = e.movementY || 0;
+    if (mx) rotate(mx * 0.0019 * sens);
+    if (my) { pitch -= my * 0.45 * sens; if (pitch < -120) pitch = -120; else if (pitch > 120) pitch = 120; }
   });
   canvas.addEventListener("mousedown", function (e) {
-    if (state === "play" && !showCollection && locked) { if (e.button === 0) doMine(); else if (e.button === 2) doPlace(); }
+    if (state === "play" && !showCollection && !showHelp && locked) { if (e.button === 0) doMine(); else if (e.button === 2) doPlace(); }
   });
   canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
@@ -642,6 +714,6 @@
   buildSprites();
   buildCollectibles();
   try { canvas.focus(); } catch (e) { /* ignore */ }
-  window.addEventListener("load", function () { try { canvas.focus(); } catch (e) {} });
+  window.addEventListener("load", function () { try { canvas.focus(); } catch (e) { } });
   requestAnimationFrame(loop);
 })();
