@@ -35,6 +35,22 @@
   }
   window.addEventListener("resize", resize);
 
+  // On-screen error display so a runtime fault is visible instead of a dead screen.
+  let fatal = null;
+  function showFatal(msg) {
+    fatal = String(msg);
+    try {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = "#3a0d0d"; ctx.fillRect(0, 0, canvas.width || 480, canvas.height || 270);
+      ctx.fillStyle = "#fff"; ctx.font = "13px monospace"; ctx.textAlign = "left"; ctx.textBaseline = "top";
+      ctx.fillText("Wigglitz error (please send this to the dev):", 12, 12);
+      ctx.fillText(fatal.substring(0, 110), 12, 34);
+    } catch (e) { /* ignore */ }
+  }
+  window.addEventListener("error", function (ev) {
+    showFatal((ev.message || "error") + (ev.lineno ? (" : line " + ev.lineno) : ""));
+  });
+
   // ---- color helpers (packed ABGR) ----------------------------------------
   function rgb(r, g, b) {
     r = r < 0 ? 0 : r > 255 ? 255 : r | 0;
@@ -515,8 +531,10 @@
     drawWig(g, IW / 2, 150, 46, roster[0], now, false);
     centerText(g, "WIGGLITZ", "bold 34px Segoe UI", "rgb(255,230,90)", IW / 2, 72);
     centerText(g, "3D  SANDBOX", "bold 10px Segoe UI", "rgb(120,220,210)", IW / 2, 108);
-    if (((now * 2) | 0) % 2 === 0) centerText(g, "Press ENTER to choose your Wigglitz", "9px Segoe UI", "#fff", IW / 2, 200);
+    if (((now * 2) | 0) % 2 === 0) centerText(g, "Click or press ENTER to choose your Wigglitz", "9px Segoe UI", "#fff", IW / 2, 200);
     centerText(g, "look - move - dig - build towers - collect them all", "9px Segoe UI", "rgb(180,200,210)", IW / 2, 226);
+    g.font = "7px Segoe UI"; g.fillStyle = "rgba(255,255,255,0.4)"; g.textAlign = "right";
+    g.fillText("web build 2", IW - 6, IH - 6); g.textAlign = "left";
   }
   function drawSelect(g) {
     centerText(g, "CHOOSE YOUR WIGGLITZ", "bold 16px Segoe UI", "rgb(255,230,90)", IW / 2, 26);
@@ -545,6 +563,7 @@
 
   // ---- frame --------------------------------------------------------------
   function render() {
+    if (fatal) return;   // error screen already drawn by showFatal()
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(S, 0, 0, S, 0, 0);
@@ -562,11 +581,15 @@
   }
 
   function loop(ts) {
-    now = ts / 1000;
-    let dt = now - lastT; lastT = now; if (dt > 0.05) dt = 0.05;
-    if (state === "play" && !showCollection) update(dt);
-    if (state === "play") updateParticles(dt);
-    render();
+    try {
+      now = ts / 1000;
+      let dt = now - lastT; lastT = now; if (dt > 0.05) dt = 0.05;
+      if (state === "play" && !showCollection) update(dt);
+      if (state === "play") updateParticles(dt);
+      render();
+    } catch (err) {
+      showFatal((err && err.message) ? err.message : String(err));
+    }
     requestAnimationFrame(loop);
   }
 
@@ -592,8 +615,16 @@
   });
   window.addEventListener("keyup", function (e) { keys.delete(e.code); });
 
-  canvas.addEventListener("click", function () {
-    if (state === "play" && !showCollection && document.pointerLockElement !== canvas) canvas.requestPointerLock();
+  canvas.addEventListener("click", function (e) {
+    canvas.focus();                          // grab keyboard focus (fixes "keys do nothing")
+    if (state === "title") { state = "select"; return; }
+    if (state === "select") {                // click a Wigglitz to pick + start
+      const n = roster.length, spacing = IW / (n + 1);
+      let i = Math.round((e.offsetX / S) / spacing) - 1;
+      if (i < 0) i = 0; else if (i >= n) i = n - 1;
+      sel = i; startWorld(); return;
+    }
+    if (!showCollection && document.pointerLockElement !== canvas) canvas.requestPointerLock();
   });
   document.addEventListener("pointerlockchange", function () { locked = document.pointerLockElement === canvas; });
   document.addEventListener("mousemove", function (e) {
@@ -610,5 +641,7 @@
   resize();
   buildSprites();
   buildCollectibles();
+  try { canvas.focus(); } catch (e) { /* ignore */ }
+  window.addEventListener("load", function () { try { canvas.focus(); } catch (e) {} });
   requestAnimationFrame(loop);
 })();
