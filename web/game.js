@@ -446,20 +446,20 @@
   }
 
   function drawHotbar(g) {
-    const n = 4, cell = 26, gap = 4, total = n * cell + (n - 1) * gap;
+    const n = 4, cs = 26, gap = 4, total = n * cs + (n - 1) * gap;
     const ox = IW / 2 - total / 2, oy = IH - 42;
     for (let i = 1; i <= n; i++) {
-      const x = ox + (i - 1) * (cell + gap);
+      const x = ox + (i - 1) * (cs + gap);
       g.fillStyle = "rgb(" + WR[i] + "," + WG[i] + "," + WB[i] + ")";
-      g.fillRect(x, oy, cell, cell);
+      g.fillRect(x, oy, cs, cs);
       g.strokeStyle = i === selBlock ? "rgb(255,240,90)" : "rgba(0,0,0,0.6)";
-      g.lineWidth = i === selBlock ? 2.5 : 1; g.strokeRect(x, oy, cell, cell);
+      g.lineWidth = i === selBlock ? 2.5 : 1; g.strokeRect(x, oy, cs, cs);
       g.fillStyle = "#fff"; g.font = "bold 9px Segoe UI"; g.fillText("" + i, x + 3, oy + 10);
     }
   }
 
   function drawMiniMap(g) {
-    const R = 7, cell = 5, size = (2 * R + 1) * cell, ox = IW - size - 6, oy = 22;
+    const R = 7, cs = 5, size = (2 * R + 1) * cs, ox = IW - size - 6, oy = 22;
     g.fillStyle = "rgba(0,0,0,0.6)"; g.fillRect(ox - 2, oy - 2, size + 4, size + 4);
     const pcx = Math.floor(posX), pcy = Math.floor(posY);
     for (let yy = -R; yy <= R; yy++)
@@ -470,15 +470,15 @@
         if (top > 0) { const m = mat < 1 ? 1 : mat > 4 ? 4 : mat, br = 0.5 + 0.5 * Math.min(1, top / 4); g.fillStyle = "rgb(" + (WR[m] * br | 0) + "," + (WG[m] * br | 0) + "," + (WB[m] * br | 0) + ")"; }
         else if (top < 0) g.fillStyle = "rgb(90,65,45)";
         else g.fillStyle = "rgb(55,75,55)";
-        g.fillRect(ox + (xx + R) * cell, oy + (yy + R) * cell, cell - 1, cell - 1);
+        g.fillRect(ox + (xx + R) * cs, oy + (yy + R) * cs, cs - 1, cs - 1);
       }
     for (let i = 0; i < collectibles.length; i++) {
       const c = collectibles[i]; if (c.got) continue;
       const rx = Math.floor(c.x) - pcx, ry = Math.floor(c.y) - pcy;
       if (rx < -R || rx > R || ry < -R || ry > R) continue;
-      g.fillStyle = "rgb(255,245,120)"; ell(g, ox + (rx + R) * cell, oy + (ry + R) * cell, cell - 1, cell - 1, "rgb(255,245,120)");
+      g.fillStyle = "rgb(255,245,120)"; ell(g, ox + (rx + R) * cs, oy + (ry + R) * cs, cs - 1, cs - 1, "rgb(255,245,120)");
     }
-    ell(g, ox + R * cell, oy + R * cell, cell - 1, cell - 1, "#fff");
+    ell(g, ox + R * cs, oy + R * cs, cs - 1, cs - 1, "#fff");
   }
 
   function drawToast(g) {
@@ -534,7 +534,7 @@
     if (((now * 2) | 0) % 2 === 0) centerText(g, "Click or press ENTER to choose your Wigglitz", "9px Segoe UI", "#fff", IW / 2, 200);
     centerText(g, "look - move - dig - build towers - collect them all", "9px Segoe UI", "rgb(180,200,210)", IW / 2, 226);
     g.font = "7px Segoe UI"; g.fillStyle = "rgba(255,255,255,0.4)"; g.textAlign = "right";
-    g.fillText("web build 2", IW - 6, IH - 6); g.textAlign = "left";
+    g.fillText("web build 3", IW - 6, IH - 6); g.textAlign = "left";
   }
   function drawSelect(g) {
     centerText(g, "CHOOSE YOUR WIGGLITZ", "bold 16px Segoe UI", "rgb(255,230,90)", IW / 2, 26);
