@@ -707,7 +707,7 @@
     for (let i = 0; i < n; i++) drawCharImg(g, sp * (i + 1), 206, 36, all[i].file, now * 1.4 + i * 0.6);
     if (((now * 2) | 0) % 2 === 0) centerText(g, "Click or press ENTER to start", "10px Segoe UI", "#fff", UIW / 2, 176);
     centerText(g, "a voxel sandbox  -  build, dig, explore & collect every Wigglitz", "8px Segoe UI", "rgb(185,205,215)", UIW / 2, 238);
-    g.font = "7px Segoe UI"; g.fillStyle = "rgba(255,255,255,0.4)"; g.textAlign = "right"; g.fillText("v8", UIW - 6, UIH - 6); g.textAlign = "left";
+    g.font = "7px Segoe UI"; g.fillStyle = "rgba(255,255,255,0.4)"; g.textAlign = "right"; g.fillText("v8.1", UIW - 6, UIH - 6); g.textAlign = "left";
   }
   function startBtn() { return { x: UIW / 2 - 54, y: 244, w: 108, h: 20 }; }
   function drawWorldSelect(g) {
