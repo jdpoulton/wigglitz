@@ -23,10 +23,13 @@
   const canvas = document.getElementById("screen");
   const vctx = canvas.getContext("2d");
   const supportsLock = !!(canvas.requestPointerLock);   // false on iOS Safari (no Pointer Lock API)
+  const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  const hasFine = !!(window.matchMedia && window.matchMedia('(any-pointer: fine)').matches);
+  const mobile = isTouch && !hasFine;   // a real touch-only device (phone/tablet), NOT a touchscreen laptop w/ mouse
   const low = document.createElement("canvas");
   let lctx, frame, fbuf, depth, RW = 320, RH = 180;
-  const RES = [[256, 144], [320, 180], [384, 216], [448, 252]];
-  let resLevel = 1;
+  const RES = mobile ? [[160, 90], [208, 117], [256, 144], [320, 180]] : [[208, 117], [256, 144], [320, 180], [384, 216]];
+  let resLevel = mobile ? 1 : 2;
   function setRes(w, h) {
     RW = w; RH = h; low.width = w; low.height = h;
     lctx = low.getContext("2d");
@@ -35,7 +38,8 @@
     depth = new Float32Array(w * h);
   }
   function resize() {
-    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    canvas.width = canvas.clientWidth || window.innerWidth;
+    canvas.height = canvas.clientHeight || window.innerHeight;
   }
   window.addEventListener("resize", resize);
 
@@ -269,7 +273,7 @@
   // =====================================================================
   //  Voxel raycaster (per pixel, 3D DDA) with textures, fog, water/glass
   // =====================================================================
-  const MAXD = 60, MAXSTEPS = 120;
+  const MAXD = mobile ? 42 : 60, MAXSTEPS = mobile ? 90 : 120;
   function faceShade(axis, sgn) {
     if (axis === 1) return sgn > 0 ? 1.0 : 0.55;   // top bright, bottom dark
     if (axis === 0) return 0.82;                     // x faces
@@ -424,21 +428,21 @@
   function physics(dt) {
     // wish direction (horizontal, from yaw)
     const sy = Math.sin(yaw), cy = Math.cos(yaw);
-    let wx = 0, wz = 0;
-    if (keys.has("KeyW")) { wx += sy; wz += cy; }
-    if (keys.has("KeyS")) { wx -= sy; wz -= cy; }
-    if (keys.has("KeyD")) { wx += cy; wz -= sy; }
-    if (keys.has("KeyA")) { wx -= cy; wz += sy; }
-    const wl = Math.hypot(wx, wz); if (wl > 0) { wx /= wl; wz /= wl; }
+    let wf = 0, ws = 0;                                   // forward, strafe wish
+    if (keys.has("KeyW")) wf += 1; if (keys.has("KeyS")) wf -= 1;
+    if (keys.has("KeyD")) ws += 1; if (keys.has("KeyA")) ws -= 1;
+    wf += touchMoveF; ws += touchMoveS;                   // analog touch joystick
+    let wx = wf * sy + ws * cy, wz = wf * cy - ws * sy;
+    const wl = Math.hypot(wx, wz); if (wl > 1) { wx /= wl; wz /= wl; }   // clamp >1, keep analog speed
     const sp = flying ? FLY : WALK;
     vx = wx * sp; vz = wz * sp;
-
+    const wantUp = keys.has("Space") || touchJump;
     if (flying) {
       vy = 0;
-      if (keys.has("Space")) vy = FLY * 0.8;
+      if (wantUp) vy = FLY * 0.8;
       if (keys.has("ShiftLeft") || keys.has("ShiftRight")) vy = -FLY * 0.8;
     } else {
-      if (keys.has("Space") && onGround) { vy = JUMP_V; onGround = false; beep(300, 0.04); }
+      if (wantUp && onGround) { vy = JUMP_V; onGround = false; beep(300, 0.04); }
       vy -= GRAV * dt; if (vy < -50) vy = -50;
     }
     onGround = false;
@@ -582,8 +586,11 @@
   const keys = new Set();
   let now = 0, lastT = 0, stepPhase = 0;
   let mouseDX = 0, mouseDY = 0, skipMouse = false;
-  let lastSpace = -9, frameMs = 16, fpsSmooth = 16;
+  let lastSpace = -9, frameMs = 16, fpsSmooth = 16, lastResSwitch = -9;
   let mbLeft = false, mbRight = false, lastAct = 0;   // mouse-button hold-to-repeat
+  let touchActive = false, touchMoveF = 0, touchMoveS = 0, touchJump = false;   // touch input
+  let moveTouchId = -1, moveBaseX = 0, moveBaseY = 0, lookTouchId = -1, lookLastX = 0, lookLastY = 0;
+  let breakTouch = -1, buildTouch = -1, jumpTouch = -1;
 
   function applyWorld(wi) {
     worldIdx = wi; const w = WORLDS[wi];
@@ -595,7 +602,7 @@
     state = "play"; showCollection = false; showHelp = false;
     px = WX / 2 + 0.5; pz = WZ / 2 + 0.5; py = surfaceY(Math.floor(px), Math.floor(pz)) + 1.05;
     vx = vy = vz = 0; yaw = 0; pitch = 0; onGround = false; flying = false; hotbarSel = 0;
-    mouseDX = mouseDY = 0;
+    mouseDX = mouseDY = 0; clearTouchInput();
   }
 
   // =====================================================================
@@ -641,7 +648,7 @@
   function hbColor(b) { const ti = tex[b]; if (ti && ti.side) { const c = ti.side[8 * TS + 8]; return "rgb(" + (c & 255) + "," + ((c >>> 8) & 255) + "," + ((c >>> 16) & 255) + ")"; } return "#999"; }
   const HB_NAME = { 1: "Grass", 2: "Dirt", 3: "Stone", 4: "Log", 7: "Planks", 5: "Leaves", 6: "Sand", 11: "Block A", 12: "Block B" };
   function drawHotbar(g) {
-    const n = HOTBAR.length, cs = 24, gap = 3, total = n * cs + (n - 1) * gap, ox = UIW / 2 - total / 2, oy = UIH - 34;
+    const n = HOTBAR.length, cs = 24, gap = 3, total = n * cs + (n - 1) * gap, ox = UIW / 2 - total / 2, oy = UIH - (mobile ? 56 : 34);
     for (let i = 0; i < n; i++) {
       const x = ox + i * (cs + gap);
       g.fillStyle = "rgba(0,0,0,0.35)"; g.fillRect(x - 1, oy - 1, cs + 2, cs + 2);
@@ -681,9 +688,10 @@
     g.fillStyle = "#ffe85a"; g.textBaseline = "middle"; g.fillText(s, UIW / 2, 14); g.textAlign = "left";
     // controls hint
     g.font = "8px Segoe UI"; g.textBaseline = "alphabetic"; g.fillStyle = "rgba(255,255,255,0.85)";
-    g.fillText("LMB break   RMB place   WASD move   Space jump   F fly   1-9 / scroll   C collection   H help", 6, UIH - 6);
+    if (!mobile) g.fillText("LMB break   RMB place   WASD move   Space jump   F fly   1-9 / scroll   C collection   H help", 6, UIH - 6);
     g.textAlign = "right"; g.fillStyle = "rgba(255,255,255,0.6)"; g.fillText("Achievements " + unlocked.size + "/" + ACH.length + "   " + Math.round(1000 / fpsSmooth) + "fps", UIW - 6, UIH - 6); g.textAlign = "left";
-    if (!locked) { g.fillStyle = "rgba(0,0,0,0.5)"; g.fillRect(0, UIH / 2 - 18, UIW, 28); centerText(g, supportsLock ? "Click to play  -  capture the mouse" : "Open on a desktop / laptop (keyboard + mouse) to play", "bold 11px Segoe UI", "#fff", UIW / 2, UIH / 2 - 3); }
+    if (mobile) drawTouch(g);
+    else if (!locked && supportsLock) { g.fillStyle = "rgba(0,0,0,0.5)"; g.fillRect(0, UIH / 2 - 16, UIW, 24); centerText(g, "Click to play  -  capture the mouse", "bold 11px Segoe UI", "#fff", UIW / 2, UIH / 2 - 3); }
     if (now < toastUntil && toastText) { let a = Math.min(1, (toastUntil - now) / 0.5); g.font = "bold 12px Segoe UI"; g.textAlign = "center"; const tw = g.measureText(toastText).width; g.fillStyle = "rgba(0,0,0," + (0.6 * a) + ")"; g.fillRect(UIW / 2 - tw / 2 - 8, 30, tw + 16, 20); g.fillStyle = "rgba(255,235,120," + a + ")"; g.textBaseline = "middle"; g.fillText(toastText, UIW / 2, 40); g.textAlign = "left"; }
   }
   function drawMenuBg(g) {
@@ -698,9 +706,8 @@
     const all = WORLDS[0].roster, n = all.length, sp = UIW / (n + 1);
     for (let i = 0; i < n; i++) drawCharImg(g, sp * (i + 1), 206, 36, all[i].file, now * 1.4 + i * 0.6);
     if (((now * 2) | 0) % 2 === 0) centerText(g, "Click or press ENTER to start", "10px Segoe UI", "#fff", UIW / 2, 176);
-    centerText(g, "a voxel sandbox  -  build, dig, explore & collect every Wigglitz", "8px Segoe UI", "rgb(185,205,215)", UIW / 2, 236);
-    if (!supportsLock) centerText(g, "best played on a desktop / laptop (keyboard + mouse)", "8px Segoe UI", "rgb(255,205,120)", UIW / 2, 250);
-    g.font = "7px Segoe UI"; g.fillStyle = "rgba(255,255,255,0.4)"; g.textAlign = "right"; g.fillText("v7.1", UIW - 6, UIH - 6); g.textAlign = "left";
+    centerText(g, "a voxel sandbox  -  build, dig, explore & collect every Wigglitz", "8px Segoe UI", "rgb(185,205,215)", UIW / 2, 238);
+    g.font = "7px Segoe UI"; g.fillStyle = "rgba(255,255,255,0.4)"; g.textAlign = "right"; g.fillText("v8", UIW - 6, UIH - 6); g.textAlign = "left";
   }
   function startBtn() { return { x: UIW / 2 - 54, y: 244, w: 108, h: 20 }; }
   function drawWorldSelect(g) {
@@ -750,7 +757,9 @@
   function drawHelp(g) {
     g.fillStyle = "rgba(12,10,26,0.9)"; g.fillRect(0, 0, UIW, UIH);
     centerText(g, "HOW TO PLAY", "bold 18px Segoe UI", "rgb(255,230,90)", UIW / 2, 28);
-    const lines = ["Mouse  -  look around   (click to capture)", "W A S D  -  move        Space  -  jump", "F  or  double-tap Space  -  fly  (Space up / Shift down)", "Hold Left click  -  keep breaking blocks", "Hold Right click  -  keep placing blocks", "1-9 or scroll wheel  -  pick a block      C  collection", "- / +  sensitivity      H  help      Esc  menu"];
+    const lines = mobile
+      ? ["Drag the RIGHT side of the screen  -  look around", "Left joystick  -  move      JMP  -  jump", "FLY  -  toggle flying   (JMP rises while flying)", "Hold DIG  -  break blocks      Hold PUT  -  place blocks", "Tap the hotbar  -  pick a block to place", "WIG  -  your collection      MENU  -  back to worlds"]
+      : ["Mouse  -  look around   (click to capture)", "W A S D  -  move        Space  -  jump", "F  or  double-tap Space  -  fly  (Space up / Shift down)", "Hold Left click  -  keep breaking blocks", "Hold Right click  -  keep placing blocks", "1-9 or scroll wheel  -  pick a block      C  collection", "- / +  sensitivity      H  help      Esc  menu"];
     g.font = "9px Segoe UI"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#e8e8f0";
     for (let i = 0; i < lines.length; i++) g.fillText(lines[i], UIW / 2, 58 + i * 20);
     g.textAlign = "left";
@@ -765,10 +774,10 @@
     try {
       const t = ts / 1000; let dt = t - lastT; lastT = t; if (dt > 0.05) dt = 0.05; now = t;
       // adaptive res
-      frameMs = ts - (loop._last || ts); loop._last = ts; fpsSmooth += (frameMs - fpsSmooth) * 0.1;
-      if (state === "play") {
-        if (fpsSmooth > 24 && resLevel > 0) { resLevel--; setRes(RES[resLevel][0], RES[resLevel][1]); }
-        else if (fpsSmooth < 13 && resLevel < RES.length - 1) { resLevel++; setRes(RES[resLevel][0], RES[resLevel][1]); }
+      let fm = ts - (loop._last || ts); loop._last = ts; if (fm > 100) fm = 100; frameMs = fm; fpsSmooth += (fm - fpsSmooth) * 0.1;
+      if (state === "play" && now - lastResSwitch > 0.8) {
+        if (fpsSmooth > 24 && resLevel > 0) { resLevel--; setRes(RES[resLevel][0], RES[resLevel][1]); lastResSwitch = now; }
+        else if (fpsSmooth < (mobile ? 17 : 13) && resLevel < RES.length - 1) { resLevel++; setRes(RES[resLevel][0], RES[resLevel][1]); lastResSwitch = now; }
       }
       // mouse look (bounded)
       if (state === "play" && !showCollection && !showHelp) {
@@ -780,7 +789,7 @@
         if (keys.has("ArrowUp")) pitch += tr; if (keys.has("ArrowDown")) pitch -= tr;
         const lim = 1.553; if (pitch > lim) pitch = lim; else if (pitch < -lim) pitch = -lim;
         physics(dt);
-        if (locked && (mbLeft || mbRight) && now - lastAct >= 0.18) { if (mbLeft) doBreak(); else doPlace(); lastAct = now; }
+        if ((mbLeft || mbRight) && now - lastAct >= 0.18) { if (mbLeft) doBreak(); else doPlace(); lastAct = now; }
         updateParticles(dt);
       } else { updateParticles(dt); }
       mouseDX = 0; mouseDY = 0;
@@ -820,21 +829,27 @@
     }
   });
   window.addEventListener("keyup", function (e) { keys.delete(e.code); });
-  window.addEventListener("blur", function () { keys.clear(); mouseDX = 0; mouseDY = 0; mbLeft = false; mbRight = false; });
-  document.addEventListener("visibilitychange", function () { if (document.hidden) { keys.clear(); mbLeft = false; mbRight = false; } });
+  window.addEventListener("blur", function () { keys.clear(); mouseDX = 0; mouseDY = 0; mbLeft = false; mbRight = false; clearTouchInput(); });
+  document.addEventListener("visibilitychange", function () { if (document.hidden) { keys.clear(); mbLeft = false; mbRight = false; clearTouchInput(); } });
 
   function uiXY(e) { return { x: e.offsetX * UIW / canvas.width, y: e.offsetY * UIH / canvas.height }; }
-  canvas.addEventListener("click", function (e) {
-    canvas.focus(); ensureAudio();
+  function handleMenuTap(p) {
     if (state === "title") { state = "world"; return; }
     if (state === "world") {
-      const p = uiXY(e), n = WORLDS.length, spacing = UIW / (n + 1), rowY = 122;
+      const n = WORLDS.length, spacing = UIW / (n + 1), rowY = 122;
       for (let i = 0; i < n; i++) { const cx = spacing * (i + 1); if (p.x >= cx - 44 && p.x <= cx + 44 && p.y >= rowY - 58 && p.y <= rowY + 56) { worldSel = i; applyWorld(i); state = "avatar"; return; } }
       return;
     }
-    if (state === "avatar") { const p = uiXY(e), b = startBtn(); if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { startPlay(); return; } const n = roster.length, spacing = UIW / (n + 1); let i = Math.round(p.x / spacing) - 1; if (i < 0) i = 0; else if (i >= n) i = n - 1; sel = i; return; }
+    if (state === "avatar") {
+      const b = startBtn(); if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { startPlay(); return; }
+      const n = roster.length, spacing = UIW / (n + 1); let i = Math.round(p.x / spacing) - 1; if (i < 0) i = 0; else if (i >= n) i = n - 1; sel = i;
+    }
+  }
+  canvas.addEventListener("click", function (e) {
+    canvas.focus(); ensureAudio();
+    if (state !== "play") { handleMenuTap(uiXY(e)); return; }
     if (showCollection || showHelp) return;
-    if (supportsLock && document.pointerLockElement !== canvas) { try { canvas.requestPointerLock(); } catch (e) { } }
+    if (supportsLock && !mobile && document.pointerLockElement !== canvas) { try { canvas.requestPointerLock(); } catch (e) { } }
   });
   document.addEventListener("pointerlockchange", function () { locked = document.pointerLockElement === canvas; if (locked) skipMouse = true; else { mouseDX = 0; mouseDY = 0; keys.clear(); mbLeft = false; mbRight = false; } });
   document.addEventListener("mousemove", function (e) {
@@ -849,6 +864,92 @@
   canvas.addEventListener("wheel", function (e) { if (state === "play" && locked) { hotbarSel = (hotbarSel + (e.deltaY > 0 ? 1 : -1) + HOTBAR.length) % HOTBAR.length; e.preventDefault(); } }, { passive: false });
 
   // =====================================================================
+  //  Touch controls (mobile): joystick + drag-look + on-screen buttons
+  // =====================================================================
+  function touchBtns() {
+    return [
+      { id: "break", x: UIW - 92, y: UIH - 52, r: 24 }, { id: "build", x: UIW - 40, y: UIH - 52, r: 24 },
+      { id: "jump", x: UIW - 40, y: UIH - 102, r: 19 }, { id: "fly", x: UIW - 92, y: UIH - 102, r: 19 },
+      { id: "menu", x: 22, y: 24, r: 16 }, { id: "coll", x: 22, y: 60, r: 16 }, { id: "help", x: 22, y: 96, r: 16 }
+    ];
+  }
+  function hitButton(ux, uy) { const bs = touchBtns(); for (let i = 0; i < bs.length; i++) { const b = bs[i], dx = ux - b.x, dy = uy - b.y, rr = b.r + 7; if (dx * dx + dy * dy <= rr * rr) return b.id; } return null; }
+  function hitHotbar(ux, uy) { const n = HOTBAR.length, cs = 24, gap = 3, total = n * cs + (n - 1) * gap, ox = UIW / 2 - total / 2, oy = UIH - (mobile ? 56 : 34); if (uy < oy - 3 || uy > oy + cs + 3) return -1; for (let i = 0; i < n; i++) { const x = ox + i * (cs + gap); if (ux >= x - 1 && ux <= x + cs + 1) return i; } return -1; }
+  function clearTouchInput() { touchMoveF = 0; touchMoveS = 0; touchJump = false; moveTouchId = -1; lookTouchId = -1; breakTouch = -1; buildTouch = -1; jumpTouch = -1; mbLeft = false; mbRight = false; }
+  function pressButton(id, tid) {
+    if (id === "break") { mbLeft = true; doBreak(); lastAct = now; breakTouch = tid; }
+    else if (id === "build") { mbRight = true; doPlace(); lastAct = now; buildTouch = tid; }
+    else if (id === "jump") { touchJump = true; jumpTouch = tid; }
+    else if (id === "fly") { flying = !flying; toast("Fly " + (flying ? "ON" : "OFF")); }
+    else if (id === "coll") { showCollection = !showCollection; showHelp = false; }
+    else if (id === "help") { showHelp = !showHelp; showCollection = false; }
+    else if (id === "menu") { state = "world"; showCollection = false; showHelp = false; clearTouchInput(); }
+  }
+  function releaseTouch(tid) {
+    if (tid === breakTouch) { mbLeft = false; breakTouch = -1; }
+    if (tid === buildTouch) { mbRight = false; buildTouch = -1; }
+    if (tid === jumpTouch) { touchJump = false; jumpTouch = -1; }
+    if (tid === moveTouchId) { moveTouchId = -1; touchMoveF = 0; touchMoveS = 0; }
+    if (tid === lookTouchId) { lookTouchId = -1; }
+  }
+  function drawTouch(g) {
+    const jbx = moveTouchId >= 0 ? moveBaseX : 56, jby = moveTouchId >= 0 ? moveBaseY : UIH - 56;
+    g.strokeStyle = "rgba(255,255,255,0.3)"; g.lineWidth = 2; g.beginPath(); g.arc(jbx, jby, 32, 0, 6.283); g.stroke();
+    g.fillStyle = "rgba(255,255,255,0.35)"; g.beginPath(); g.arc(jbx + touchMoveS * 28, jby - touchMoveF * 28, 15, 0, 6.283); g.fill();
+    const bs = touchBtns();
+    for (let i = 0; i < bs.length; i++) {
+      const b = bs[i]; let col = "rgba(255,255,255,0.16)", lbl = "";
+      if (b.id === "break") { col = breakTouch >= 0 ? "rgba(255,140,140,0.7)" : "rgba(225,95,95,0.42)"; lbl = "DIG"; }
+      else if (b.id === "build") { col = buildTouch >= 0 ? "rgba(150,235,170,0.7)" : "rgba(95,205,125,0.42)"; lbl = "PUT"; }
+      else if (b.id === "jump") { col = jumpTouch >= 0 ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.16)"; lbl = "JMP"; }
+      else if (b.id === "fly") { col = flying ? "rgba(120,200,255,0.6)" : "rgba(255,255,255,0.16)"; lbl = "FLY"; }
+      else if (b.id === "menu") { lbl = "MENU"; }
+      else if (b.id === "coll") { lbl = "WIG"; }
+      else if (b.id === "help") { lbl = "?"; }
+      g.fillStyle = col; g.beginPath(); g.arc(b.x, b.y, b.r, 0, 6.283); g.fill();
+      g.strokeStyle = "rgba(255,255,255,0.45)"; g.lineWidth = 1.5; g.beginPath(); g.arc(b.x, b.y, b.r, 0, 6.283); g.stroke();
+      centerText(g, lbl, "bold " + (b.id === "menu" ? 7 : (b.r > 17 ? 10 : 8)) + "px Segoe UI", "#fff", b.x, b.y + 1);
+    }
+  }
+  function tuv(t) { return { x: t.clientX * UIW / canvas.width, y: t.clientY * UIH / canvas.height }; }
+  canvas.addEventListener("touchstart", function (e) {
+    if (!mobile) return;
+    touchActive = true; ensureAudio(); try { canvas.focus(); } catch (er) { }
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i], p = tuv(t);
+      if (state !== "play") { handleMenuTap(p); continue; }
+      if (showCollection || showHelp) { showCollection = false; showHelp = false; continue; }
+      const b = hitButton(p.x, p.y); if (b) { pressButton(b, t.identifier); continue; }
+      const hb = hitHotbar(p.x, p.y); if (hb >= 0) { hotbarSel = hb; continue; }
+      if (p.x < UIW * 0.5) { if (moveTouchId < 0) { moveTouchId = t.identifier; moveBaseX = p.x; moveBaseY = p.y; touchMoveF = 0; touchMoveS = 0; } }
+      else { if (lookTouchId < 0) { lookTouchId = t.identifier; lookLastX = p.x; lookLastY = p.y; } }
+    }
+    e.preventDefault();
+  }, { passive: false });
+  canvas.addEventListener("touchmove", function (e) {
+    if (!mobile) return;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i], p = tuv(t);
+      if (t.identifier === moveTouchId) {
+        let dx = p.x - moveBaseX, dy = p.y - moveBaseY; const len = Math.hypot(dx, dy), mr = 30;
+        if (len > mr) { dx = dx / len * mr; dy = dy / len * mr; }
+        touchMoveS = dx / mr; touchMoveF = -dy / mr;
+      } else if (t.identifier === lookTouchId) {
+        let dx = p.x - lookLastX, dy = p.y - lookLastY; lookLastX = p.x; lookLastY = p.y;
+        if (!showCollection && !showHelp) {
+          if (dx > 60) dx = 60; else if (dx < -60) dx = -60; if (dy > 60) dy = 60; else if (dy < -60) dy = -60;
+          yaw += dx * 0.007 * sens; pitch -= dy * 0.007 * sens;
+          const lim = 1.553; if (pitch > lim) pitch = lim; else if (pitch < -lim) pitch = -lim;
+        }
+      }
+    }
+    e.preventDefault();
+  }, { passive: false });
+  function endTouch(e) { if (!mobile) return; for (let i = 0; i < e.changedTouches.length; i++) releaseTouch(e.changedTouches[i].identifier); e.preventDefault(); }
+  canvas.addEventListener("touchend", endTouch, { passive: false });
+  canvas.addEventListener("touchcancel", endTouch, { passive: false });
+
+  // =====================================================================
   //  Boot
   // =====================================================================
   setRes(RES[resLevel][0], RES[resLevel][1]);
@@ -856,6 +957,7 @@
   preloadAll();
   applyWorld(0);
   try { canvas.focus(); } catch (e) { }
-  window.addEventListener("load", function () { try { canvas.focus(); } catch (e) { } });
+  window.addEventListener("load", function () { resize(); try { canvas.focus(); } catch (e) { } });
+  window.addEventListener("orientationchange", function () { setTimeout(resize, 200); });
   requestAnimationFrame(loop);
 })();
