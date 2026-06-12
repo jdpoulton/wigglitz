@@ -22,6 +22,7 @@
   const UIW = 480, UIH = 270;
   const canvas = document.getElementById("screen");
   const vctx = canvas.getContext("2d");
+  const supportsLock = !!(canvas.requestPointerLock);   // false on iOS Safari (no Pointer Lock API)
   const low = document.createElement("canvas");
   let lctx, frame, fbuf, depth, RW = 320, RH = 180;
   const RES = [[256, 144], [320, 180], [384, 216], [448, 252]];
@@ -682,7 +683,7 @@
     g.font = "8px Segoe UI"; g.textBaseline = "alphabetic"; g.fillStyle = "rgba(255,255,255,0.85)";
     g.fillText("LMB break   RMB place   WASD move   Space jump   F fly   1-9 / scroll   C collection   H help", 6, UIH - 6);
     g.textAlign = "right"; g.fillStyle = "rgba(255,255,255,0.6)"; g.fillText("Achievements " + unlocked.size + "/" + ACH.length + "   " + Math.round(1000 / fpsSmooth) + "fps", UIW - 6, UIH - 6); g.textAlign = "left";
-    if (!locked) { g.fillStyle = "rgba(0,0,0,0.45)"; g.fillRect(0, UIH / 2 - 16, UIW, 24); centerText(g, "Click to play  -  capture the mouse", "bold 11px Segoe UI", "#fff", UIW / 2, UIH / 2 - 4); }
+    if (!locked) { g.fillStyle = "rgba(0,0,0,0.5)"; g.fillRect(0, UIH / 2 - 18, UIW, 28); centerText(g, supportsLock ? "Click to play  -  capture the mouse" : "Open on a desktop / laptop (keyboard + mouse) to play", "bold 11px Segoe UI", "#fff", UIW / 2, UIH / 2 - 3); }
     if (now < toastUntil && toastText) { let a = Math.min(1, (toastUntil - now) / 0.5); g.font = "bold 12px Segoe UI"; g.textAlign = "center"; const tw = g.measureText(toastText).width; g.fillStyle = "rgba(0,0,0," + (0.6 * a) + ")"; g.fillRect(UIW / 2 - tw / 2 - 8, 30, tw + 16, 20); g.fillStyle = "rgba(255,235,120," + a + ")"; g.textBaseline = "middle"; g.fillText(toastText, UIW / 2, 40); g.textAlign = "left"; }
   }
   function drawMenuBg(g) {
@@ -697,8 +698,9 @@
     const all = WORLDS[0].roster, n = all.length, sp = UIW / (n + 1);
     for (let i = 0; i < n; i++) drawCharImg(g, sp * (i + 1), 206, 36, all[i].file, now * 1.4 + i * 0.6);
     if (((now * 2) | 0) % 2 === 0) centerText(g, "Click or press ENTER to start", "10px Segoe UI", "#fff", UIW / 2, 176);
-    centerText(g, "a voxel sandbox  -  build, dig, explore & collect every Wigglitz", "8px Segoe UI", "rgb(185,205,215)", UIW / 2, 238);
-    g.font = "7px Segoe UI"; g.fillStyle = "rgba(255,255,255,0.4)"; g.textAlign = "right"; g.fillText("v7", UIW - 6, UIH - 6); g.textAlign = "left";
+    centerText(g, "a voxel sandbox  -  build, dig, explore & collect every Wigglitz", "8px Segoe UI", "rgb(185,205,215)", UIW / 2, 236);
+    if (!supportsLock) centerText(g, "best played on a desktop / laptop (keyboard + mouse)", "8px Segoe UI", "rgb(255,205,120)", UIW / 2, 250);
+    g.font = "7px Segoe UI"; g.fillStyle = "rgba(255,255,255,0.4)"; g.textAlign = "right"; g.fillText("v7.1", UIW - 6, UIH - 6); g.textAlign = "left";
   }
   function startBtn() { return { x: UIW / 2 - 54, y: 244, w: 108, h: 20 }; }
   function drawWorldSelect(g) {
@@ -790,7 +792,7 @@
   // =====================================================================
   //  Input
   // =====================================================================
-  function relock() { try { if (state === "play" && !showCollection && !showHelp && document.pointerLockElement !== canvas) canvas.requestPointerLock(); } catch (e) { } }
+  function relock() { try { if (supportsLock && state === "play" && !showCollection && !showHelp && document.pointerLockElement !== canvas) canvas.requestPointerLock(); } catch (e) { } }
   window.addEventListener("keydown", function (e) {
     keys.add(e.code); ensureAudio();
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Tab"].indexOf(e.code) >= 0) e.preventDefault();
@@ -832,7 +834,7 @@
     }
     if (state === "avatar") { const p = uiXY(e), b = startBtn(); if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { startPlay(); return; } const n = roster.length, spacing = UIW / (n + 1); let i = Math.round(p.x / spacing) - 1; if (i < 0) i = 0; else if (i >= n) i = n - 1; sel = i; return; }
     if (showCollection || showHelp) return;
-    if (document.pointerLockElement !== canvas) canvas.requestPointerLock();
+    if (supportsLock && document.pointerLockElement !== canvas) { try { canvas.requestPointerLock(); } catch (e) { } }
   });
   document.addEventListener("pointerlockchange", function () { locked = document.pointerLockElement === canvas; if (locked) skipMouse = true; else { mouseDX = 0; mouseDY = 0; keys.clear(); mbLeft = false; mbRight = false; } });
   document.addEventListener("mousemove", function (e) {
