@@ -3,27 +3,16 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-<title>Wigglitz 3D</title>
+<title>Wigglitz Craft</title>
 <style>
-  html, body {
-    margin: 0; height: 100%; background: #0a0814; overflow: hidden;
-    font-family: "Segoe UI", system-ui, sans-serif; color: #eee;
-  }
-  #wrap {
-    width: 100%; height: 100%;
-    display: flex; align-items: center; justify-content: center;
-  }
-  canvas {
-    image-rendering: pixelated;
-    image-rendering: crisp-edges;
-    background: #0a0814;
-    box-shadow: 0 0 40px rgba(0,0,0,0.6);
-    outline: none;
-  }
+  html, body { margin: 0; height: 100%; background: #0a0814; overflow: hidden;
+    font-family: "Segoe UI", system-ui, sans-serif; color: #eee; }
+  #screen { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block;
+    background: #0a0814; outline: none; cursor: crosshair; }
 </style>
 </head>
 <body>
-  <div id="wrap"><canvas id="screen" tabindex="0"></canvas></div>
+  <canvas id="screen" tabindex="0"></canvas>
   <script src="game.js"></script>
 </body>
 </html>
